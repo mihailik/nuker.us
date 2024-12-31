@@ -1,11 +1,15 @@
 {
   "dependencies": {
+    "@ipld/car": "^5.4.0",
+    "binaryen": "^121.0.0",
+    "cbor-x": "^1.6.0",
     "esbuild": "^0.24.2",
+    "multiformats": "^13.3.1",
     "three": "^0.172.0",
     "troika-three-text": "^0.52.3"
   },
   "scripts": {
-    "build-rust": "cargo build --release --manifest-path ./rust/Cargo.toml --target wasm32-unknown-unknown && wasm-bindgen ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm.wasm --target web --out-dir ./rust/target/wasm-bindgen-web",
+    "build-rust": "cargo build --release --manifest-path ./rust/Cargo.toml --target wasm32-unknown-unknown && wasm-opt ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm.wasm -Oz -o ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm_opt.wasm && wasm-bindgen ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm_opt.wasm --target web --out-dir ./rust/target/wasm-bindgen-web",
     "build-ruste": "cargo build --release --manifest-path ./rust/Cargo.toml --target wasm32-unknown-emscripten && wasm-bindgen ./rust/target/wasm32-unknown-emscripten/release/nukerus_wasm.wasm --target web --out-dir ./rust/target/wasm-bindgen-web",
     "build-js": "esbuild js/index.js --loader:.wasm=binary --bundle --outdir=. --sourcemap --define:import.meta.url=\\\".\\\"",
     "start": "npm run build-js -- --serve --servedir=.",

@@ -2,6 +2,7 @@
 
 import * as wasm from './rust';
 import { firehoseWebSocket } from './firehose-ws';
+import { firehose } from './firehose-coldsky';
 
 runOnce();
 
@@ -15,14 +16,17 @@ document.body.appendChild(btn);
 const btnWs = document.createElement('button');
 btnWs.textContent = 'web socket';
 btnWs.onclick = async () => {
-  const stopListening = Date.now() + 3000;
+  const LISTEN_TIME = 10000;
+  const stopListening = Date.now() + LISTEN_TIME;
 
   const outPre = document.createElement('pre');
   outPre.textContent = 'Listening...';
   document.body.appendChild(outPre);
 
   let count = 0;
-  let allStart;
+  let allStart = 0;
+  let allTime = 0;
+  let logObj = {};
   for await (const messages of firehoseWebSocket()) {
     if (!allStart) allStart = Date.now();
 
@@ -59,12 +63,16 @@ btnWs.onclick = async () => {
       timestampOffsets
     );
     const chunkTime = Date.now() - chunkStart;
+    allTime += chunkTime;
 
-    outPre.textContent = JSON.stringify({
+    outPre.textContent = JSON.stringify(logObj = {
       count,
       increment: messages.length,
-      time: chunkTime,
+      time: Date.now() - allStart,
+      parseTime: chunkTime,
+      allParseTime: allTime,
       perMessage: chunkTime / messages.length,
+      perMessageTotal: allTime / count,
       receiveTimestamp: messages[messages.length - 1].receiveTimestamp,
       data: {
         byteLength: messages[messages.length - 1].data.byteLength,
@@ -72,7 +80,29 @@ btnWs.onclick = async () => {
       }
     }, null, 2);
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  const coldskyAllStart = Date.now();
+  let coldskyAllParseTime = 0;
+  let coldskyCount = 0;
+  const stopListeningColdsky = Date.now() + LISTEN_TIME;
+  for await (const chunk of firehose()) {
+    coldskyAllParseTime += chunk.parseTime;
+    coldskyCount +=
+      (chunk.messages?.length || 0) +
+      (chunk.deletes?.length || 0) +
+      (chunk.unexpected?.length || 0);
+    
+    outPre.textContent = JSON.stringify(logObj = {
+      ...logObj,
+      coldskyCount,
+      coldskyAllParseTime,
+      coldskyTime: Date.now() - coldskyAllStart,
+      coldskyPerMessage: coldskyAllParseTime / coldskyCount,
+    }, null, 2);
+
+    if (Date.now() > stopListeningColdsky) break;
   }
 
   const finishElem = document.createElement('div');
