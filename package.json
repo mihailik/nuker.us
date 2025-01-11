@@ -1,0 +1,17 @@
+{
+  "scripts": {
+    "start": "esbuild src/index.js --bundle --outdir=. --sourcemap --serve --servedir=.",
+    "build": "esbuild src/index.js --bundle --outdir=. --sourcemap"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
+    "coldsky": "^0.2.96",
+    "eld": "^1.0.1",
+    "esbuild": "^0.24.2",
+    "three": "^0.172.0",
+    "troika-three-text": "^0.52.3"
+  },
+  "devDependencies": {
+    "ws": "^8.18.0"
+  }
+}
