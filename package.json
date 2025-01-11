@@ -5,7 +5,7 @@
     "troika-three-text": "^0.52.3"
   },
   "scripts": {
-    "build-rust": "wasm-pack build ./rust --dev --target web --out-dir ../wasm",
+    "build-rust": "wasm-pack build ./rust --dev --target bundler --out-dir ../wasm",
     "build-js": "esbuild js/index.js --bundle --outdir=. --sourcemap",
     "start": "esbuild js/index.js --bundle --outdir=. --sourcemap --serve --servedir=."
   }
