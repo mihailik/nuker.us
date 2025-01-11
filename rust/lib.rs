@@ -10,5 +10,4 @@ extern "C" {
 #[wasm_bindgen]
 pub fn greet() {
     alert("Hello, world!");
-    return 123;
 }
