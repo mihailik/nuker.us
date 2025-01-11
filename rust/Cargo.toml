@@ -1,0 +1,13 @@
+[package]
+name = "nukerus-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# getrandom = { version = "0.2.15", features = ["js"] }
+# wasm-pack = "0.13.1"
+wasm-bindgen = "0.2" # this one has 0.2.99 version that blows randomly
+
+[lib]
+crate-type = ["cdylib", "rlib"]  # ?? no clue what this shit is for
+path = "./lib.rs"
