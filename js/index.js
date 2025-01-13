@@ -8,7 +8,7 @@ async function start() {
 
   console.log({ wasm });
 
-  const value = greet((Math.random() * 200) | 0);
+  const value = greet(Math.floor((Math.random() * 200)) - 10);
 
   const valueElem = document.createElement('pre');
   valueElem.textContent = value;
@@ -17,7 +17,7 @@ async function start() {
   const btn = document.createElement('button');
   btn.textContent = 'more...';
   btn.onclick = () => {
-    const value = greet((Math.random() * 200) | 0);
+    const value = greet(Math.floor((Math.random() * 200)) - 10);
 
     const valueElem = document.createElement('pre');
     valueElem.textContent = value;

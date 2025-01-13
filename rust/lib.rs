@@ -17,9 +17,7 @@ pub fn greet(x: i32) -> String {
         ));
     }
 
-    return (
-            "Hello, worl ".to_owned() +
+    return "**String generated in RUST with parameter: [".to_owned() +
             &x.to_string() +
-            &" OK".to_owned()
-        ); 
+            &"]**".to_owned(); 
 }
