@@ -8,6 +8,18 @@ extern "C" {
 
 // Export `greet`
 #[wasm_bindgen]
-pub fn greet() {
-    alert("Hello, world!");
+pub fn greet(x: i32) -> String {
+    if x < 0 {
+        alert(&(
+            "Negative ".to_owned() +
+            &x.to_string() +
+            &".".to_owned()
+        ));
+    }
+
+    return (
+            "Hello, worl ".to_owned() +
+            &x.to_string() +
+            &" OK".to_owned()
+        ); 
 }

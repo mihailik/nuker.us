@@ -4,9 +4,24 @@ start();
 
 async function start() {
   console.log('wasmRaw ', wasmRaw);
-  const wasm = await initSync(wasmRaw);
+  const wasm = await initSync({ module: wasmRaw });
 
   console.log({ wasm });
 
-  greet();
+  const value = greet((Math.random() * 200) | 0);
+
+  const valueElem = document.createElement('pre');
+  valueElem.textContent = value;
+  document.body.appendChild(valueElem);
+
+  const btn = document.createElement('button');
+  btn.textContent = 'more...';
+  btn.onclick = () => {
+    const value = greet((Math.random() * 200) | 0);
+
+    const valueElem = document.createElement('pre');
+    valueElem.textContent = value;
+    document.body.appendChild(valueElem);
+  };
+  document.body.appendChild(btn);
 }
