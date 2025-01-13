@@ -8,20 +8,27 @@ async function start() {
 
   console.log({ wasm });
 
-  const value = greet(Math.floor((Math.random() * 200)) - 10);
-
-  const valueElem = document.createElement('pre');
-  valueElem.textContent = value;
-  document.body.appendChild(valueElem);
+  runOnce();
 
   const btn = document.createElement('button');
   btn.textContent = 'more...';
   btn.onclick = () => {
-    const value = greet(Math.floor((Math.random() * 200)) - 10);
+    runOnce();
+  };
+  document.body.appendChild(btn);
+
+  function runOnce() {
+    const arg = Math.floor((Math.random() * 200)) - 10;
+    const start = Date.now();
+    const value = greet(arg);
+    const time = Date.now() - start;
 
     const valueElem = document.createElement('pre');
     valueElem.textContent = value;
+    const tmElem = document.createElement('span');
+    tmElem.textContent = time + 'ms';
+    tmElem.style.cssText = 'font-size: 80%; padding-left: 1em; opacity: 0.6';
+    valueElem.appendChild(tmElem);
     document.body.appendChild(valueElem);
-  };
-  document.body.appendChild(btn);
+  }
 }
