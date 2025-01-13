@@ -5,8 +5,9 @@
     "troika-three-text": "^0.52.3"
   },
   "scripts": {
-    "build-rust": "wasm-pack build ./rust --dev --target bundler --out-dir ../wasm",
-    "build-js": "esbuild js/index.js --bundle --outdir=. --sourcemap",
-    "start": "esbuild js/index.js --bundle --outdir=. --sourcemap --serve --servedir=."
+    "build-rust": "cargo build --manifest-path ./rust/Cargo.toml --target wasm32-unknown-unknown && wasm-bindgen ./rust/target/wasm32-unknown-unknown/debug/nukerus_wasm.wasm --out-dir ./rust/target/wasm-bindgen",
+    "build-js": "esbuild js/index.js --loader:.wasm=binary --bundle --outdir=. --sourcemap --define:import.meta.url=\\\".\\\"",
+    "start": "npm run build-js -- --serve --servedir=.",
+    "build": "npm run build-rust && npm run build-js"
   }
 }
