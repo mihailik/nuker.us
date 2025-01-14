@@ -51,16 +51,20 @@ btnWs.onclick = async () => {
     }
 
     //console.log('wasm.process_record_list ', buffer, sizes);
+    const chunkStart = Date.now();
     const msgRes = wasm.process_record_list(
       buffer,
       sizes,
       timestampStart,
       timestampOffsets
     );
+    const chunkTime = Date.now() - chunkStart;
 
     outPre.textContent = JSON.stringify({
       count,
       increment: messages.length,
+      time: chunkTime,
+      perMessage: chunkTime / messages.length,
       receiveTimestamp: messages[messages.length - 1].receiveTimestamp,
       data: {
         byteLength: messages[messages.length - 1].data.byteLength,
