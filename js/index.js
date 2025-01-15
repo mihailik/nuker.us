@@ -16,7 +16,29 @@ document.body.appendChild(btn);
 const btnWs = document.createElement('button');
 btnWs.textContent = 'web socket';
 btnWs.onclick = async () => {
-  const LISTEN_TIME = 10000;
+  runFirehoseOnce();
+};
+document.body.appendChild(btnWs);
+
+runFirehoseOnce();
+
+function runOnce() {
+  const arg = Math.floor((Math.random() * 200)) - 10;
+  const start = Date.now();
+  const value = wasm.greet(arg);
+  const time = Date.now() - start;
+
+  const valueElem = document.createElement('pre');
+  valueElem.textContent = value;
+  const tmElem = document.createElement('span');
+  tmElem.textContent = time + 'ms';
+  tmElem.style.cssText = 'font-size: 80%; padding-left: 1em; opacity: 0.6';
+  valueElem.appendChild(tmElem);
+  document.body.appendChild(valueElem);
+}
+
+async function runFirehoseOnce() {
+  const LISTEN_TIME = 3000;
   const stopListening = Date.now() + LISTEN_TIME;
 
   const outPre = document.createElement('pre');
@@ -86,14 +108,14 @@ btnWs.onclick = async () => {
   const coldskyAllStart = Date.now();
   let coldskyAllParseTime = 0;
   let coldskyCount = 0;
-  const stopListeningColdsky = Date.now() + LISTEN_TIME;
+  const stopListeningColdsky = Date.now() + LISTEN_TIME * 10;
   for await (const chunk of firehose()) {
     coldskyAllParseTime += chunk.parseTime;
     coldskyCount +=
       (chunk.messages?.length || 0) +
       (chunk.deletes?.length || 0) +
       (chunk.unexpected?.length || 0);
-    
+
     outPre.textContent = JSON.stringify(logObj = {
       ...logObj,
       coldskyCount,
@@ -108,20 +130,4 @@ btnWs.onclick = async () => {
   const finishElem = document.createElement('div');
   finishElem.textContent = `Finished ${count} in ${Date.now() - allStart}ms`;
   outPre.appendChild(finishElem);
-};
-document.body.appendChild(btnWs);
-
-function runOnce() {
-  const arg = Math.floor((Math.random() * 200)) - 10;
-  const start = Date.now();
-  const value = wasm.greet(arg);
-  const time = Date.now() - start;
-
-  const valueElem = document.createElement('pre');
-  valueElem.textContent = value;
-  const tmElem = document.createElement('span');
-  tmElem.textContent = time + 'ms';
-  tmElem.style.cssText = 'font-size: 80%; padding-left: 1em; opacity: 0.6';
-  valueElem.appendChild(tmElem);
-  document.body.appendChild(valueElem);
 }
