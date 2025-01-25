@@ -164,11 +164,17 @@ export async function* firehose() {
     }
   }
 
+  /**
+   * @param {ArrayBuffer} messageBuf
+   */
   function parseMessageBufAndResolve(messageBuf) {
     parseMessageBuf(messageBuf);
     buf.resolve();
   }
 
+  /**
+   * @param {ArrayBuffer} messageBuf
+   */
   function parseMessageBuf(messageBuf) {
     try {
       parseMessageBufWorker(messageBuf);
