@@ -25,7 +25,7 @@ pub fn greet(x: i32) -> String {
 }
 
 #[wasm_bindgen]
-pub fn process_record(buffer: &[u8], receive_timestamp: u64) -> String {
+pub fn process_record(buffer: &[u8], _receive_timestamp: u64) -> String {
     let fr = frame::Frame::try_from(&buffer[0..buffer.len()]);
     let msg = frame_lib::FirehoseMessage::try_from(fr.unwrap());
 
