@@ -11,10 +11,9 @@
   },
   "dependencies": {
     "@tensorflow/tfjs": "^4.22.0",
-    "coldsky": "^0.3.6",
+    "coldsky": "^0.3.10",
     "eld": "^1.0.1",
     "@ipld/car": "^5.4.0",
-    "binaryen": "^121.0.0",
     "cbor-x": "^1.6.0",
     "esbuild": "^0.24.2",
     "multiformats": "^13.3.1",
