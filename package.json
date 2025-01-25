@@ -2,7 +2,10 @@
   "scripts": {
     "start": "esbuild src/index.js --bundle --outdir=. --sourcemap --serve --servedir=.",
     "build": "npm run build-rust && npm run build-js",
-    "build-rust": "cargo build --release --manifest-path ./rust/Cargo.toml --target wasm32-unknown-unknown && wasm-opt ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm.wasm -Oz -o ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm_opt.wasm && wasm-bindgen ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm_opt.wasm --target web --out-dir ./rust/target/wasm-bindgen-web",
+    "build-rust-1-core": "cargo build --release --manifest-path ./rust/Cargo.toml --target wasm32-unknown-unknown",
+    "build-rust-2-opt": "wasm-opt ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm.wasm -Oz -o ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm.wasm || echo 'OPTIMIZATION SKIPPED'",
+    "build-rust-3-bindgen": "wasm-bindgen ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm.wasm --target web --out-dir ./rust/target/wasm-bindgen-web",
+    "build-rust": "npm run build-rust-1-core &&     npm run build-rust-2-opt &&     npm run build-rust-3-bindgen",
     "build-ruste": "cargo build --release --manifest-path ./rust/Cargo.toml --target wasm32-unknown-emscripten && wasm-bindgen ./rust/target/wasm32-unknown-emscripten/release/nukerus_wasm.wasm --target web --out-dir ./rust/target/wasm-bindgen-web",
     "build-js": "esbuild js/index.js --loader:.wasm=binary --bundle --outdir=. --sourcemap --define:import.meta.url=\\\".\\\""
   },
