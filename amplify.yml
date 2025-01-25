@@ -6,6 +6,8 @@ frontend:
         # install rust
         - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         - source ~/.cargo/env
+        - sudo yum update -y
+        - sudo yum install -y binaryen
         # # install trunk
         # - cargo install trunk
         # add WASM target
