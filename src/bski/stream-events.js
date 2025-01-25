@@ -1,6 +1,6 @@
 // @ts-check
 
-import { firehoseRecords } from 'coldsky';
+import { firehose } from 'coldsky';
 
 /**
  * @typedef {{
@@ -46,7 +46,7 @@ export async function* streamEvents() {
   /** @type {Map<string, AccountDetails>} */
   const accounts = new Map();
 
-  for await (const msg of firehoseRecords()) {
-
+  for await (const buf of firehose()) {
+    yield* buf;
   }
 }
