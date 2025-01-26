@@ -4,8 +4,10 @@ import { breakFeedURIPostOnly, firehose, shortenHandle, unwrapShortDID } from 'c
 
 /**
  * @typedef {{
- *  atUri: string,
+ *  uri: string,
  *  owner: string,
+ *  messages: Map<string, MessageDetails>,
+ *  speakers: { [shortDID: string]: { count: number, likes: number } },
  *  earlier: ConversationStats,
  *  recent: ConversationStats
  * }} ConversationDetails
@@ -14,16 +16,15 @@ import { breakFeedURIPostOnly, firehose, shortenHandle, unwrapShortDID } from 'c
 /**
  * @typedef {{
  *  likes: number,
- *  replies: number,
- *  messages: Map<string, MessageDetails>,
- *  words: WordStats,
- *  participants: { [shortDID: string]: { avg: number, max: number, min: number, count: number, likes: number } }
+ *  posts: number,
+ *  words: WordStats
  * }} ConversationStats;
  */
 
 /**
  * @typedef {{
- *  replyTo: string,
+ *  conversation: ConversationDetails,
+ *  replyToURI: string | undefined,
  *  likes: number,
  *  quoting?: string[],
  *  referring?: string[],
@@ -66,7 +67,7 @@ export async function* streamEvents() {
   /** @type {Map<string, ActorDetails>} */
   const actors = new Map();
 
-  /** @type {Map<string, Map<string, Partial<MessageDetails> & { placeholder: true } | MessageDetails & { placeholder?: false }>>} */
+  /** @type {Map<string, Map<string, Partial<MessageDetails> & { uri: string, placeholder: true } | MessageDetails & { placeholder?: false }>>} */
   const messagesByShortDIDByPostID = new Map();
 
   for await (const msg of firehose.each()) {
@@ -114,24 +115,50 @@ export async function* streamEvents() {
     }
   }
 
-  /** @param {import('coldsky').FirehoseRepositoryRecord<"app.bsky.feed.like">} msg */
-  function processLike(msg) {
-    const resolvedURI = breakFeedURIPostOnly(msg.uri);
-    if (!resolvedURI) return;
+  /**
+   * @param {string | undefined} uri
+   * @param {{ shortDID: string, postID: string } | undefined} parsed
+   * @param {number} receiveTimestamp
+   */
+  function resolveMessageOrPlaceholderEmpty(uri, parsed, receiveTimestamp) {
+    if (!uri || !parsed) return;
 
-    let byPostID = messagesByShortDIDByPostID.get(resolvedURI.shortDID);
+    return resolveMessageOrPlaceholder(uri, parsed.shortDID, parsed.postID, receiveTimestamp);
+  }
+
+  /**
+   * @param {string} uri
+   * @param {string} shortDID
+   * @param {string} postID
+   * @param {number} receiveTimestamp
+   */
+  function resolveMessageOrPlaceholder(uri, shortDID, postID, receiveTimestamp) {
+    let byPostID = messagesByShortDIDByPostID.get(shortDID);
     if (!byPostID) {
-      noteRepo(resolvedURI.shortDID, msg.receiveTimestamp);
+      noteRepo(shortDID, receiveTimestamp);
       byPostID = new Map();
-      messagesByShortDIDByPostID.set(resolvedURI.shortDID, byPostID);
+      messagesByShortDIDByPostID.set(shortDID, byPostID);
     }
 
-    let messageDetails = byPostID.get(resolvedURI.postID);
-    if (messageDetails) {
-      messageDetails.likes = (messageDetails.likes || 0) + 1;
-    } else {
-      messageDetails = { placeholder: true, likes: 1 };
-      byPostID.set(resolvedURI.postID, messageDetails);
+    let messageDetails = byPostID.get(postID);
+    if (!messageDetails) {
+      messageDetails = { uri, placeholder: true };
+      byPostID.set(postID, messageDetails);
+    }
+
+    return messageDetails;
+  }
+
+  /** @param {import('coldsky').FirehoseRepositoryRecord<"app.bsky.feed.like">} msg */
+  function processLike(msg) {
+    const messageDetails = resolveMessageOrPlaceholderEmpty(msg.uri, breakFeedURIPostOnly(msg.uri), msg.receiveTimestamp);
+    if (!messageDetails) return; // unresolvable
+    messageDetails.likes = (messageDetails.likes || 0) + 1;
+    if (messageDetails.conversation) {
+      messageDetails.conversation.recent.likes++;
+      const speakerStats = messageDetails.conversation.speakers[msg.repo];
+      if (speakerStats) speakerStats.likes++;
+      else messageDetails.conversation.speakers[msg.repo] = { count: 0, likes: 1 };
     }
   }
 
@@ -150,10 +177,63 @@ export async function* streamEvents() {
       messagesByShortDIDByPostID.set(shortDID, byPostID);
     }
 
-    // msg.uri
+    const pathLastSlash = msg.path?.lastIndexOf('/');
+    const postID = pathLastSlash > 0 ? msg.path.slice(pathLastSlash + 1) : msg.path;
 
-    // byPostID.set(
+    const rootURI = msg.reply?.root?.uri || msg.uri;
+    const parsedRootURI = breakFeedURIPostOnly(rootURI);
+    const rootMessage = resolveMessageOrPlaceholderEmpty(rootURI, parsedRootURI, msg.receiveTimestamp);
+    let conversation = rootMessage?.placeholder ? undefined : rootMessage?.conversation;
+    if (!conversation) conversations.set(
+      msg.reply?.root?.uri || msg.uri,
+      conversation = {
+        uri: rootURI,
+        owner: parsedRootURI?.shortDID || shortDID,
+        messages: new Map(),
+        speakers: {},
+        earlier: {
+          likes: 0,
+          posts: 0,
+          words: {}
+        },
+        recent: {
+          likes: 0,
+          posts: 1,
+          words: {}
+        }
+      }
+    );
 
+    if (rootMessage && rootMessage.conversation) {
+        rootMessage.conversation = conversation;
+        conversation.messages.set(rootURI, rootMessage);
+      }
+
+      rootMessage.conversation.recent.posts++;
+      textWords(msg.text, rootMessage.conversation.recent.words);
+    } else {
+
+    }
+
+    if (rootMessage) {
+
+    }
+
+    if (msg.reply?.parent?.uri !== msg.uri) {
+      const parentURI = breakFeedURIPostOnly(msg.reply?.parent?.uri);
+      const parentMessage = parentURI && resolveMessageOrPlaceholder(parentURI, msg.receiveTimestamp);
+      if (parentMessage) {
+        if (!rootMessage?.conversation) rootMessage?.conversation = 
+      }
+    }
+
+    byPostID.set(
+      postID,
+      {
+        replyToURI: msg.reply,
+        likes: 0,
+        words,
+      });
   }
 
   /** @param {import('coldsky').FirehoseRepositoryRecord<"app.bsky.feed.repost">} msg */
