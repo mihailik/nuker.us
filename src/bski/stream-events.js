@@ -4,7 +4,7 @@ import { breakFeedURIPostOnly, firehose, shortenHandle, unwrapShortDID } from 'c
 
 /**
  * @typedef {{
- *  uri: string,
+ *  rootURI: string,
  *  owner: string,
  *  messages: Map<string, MessageDetails>,
  *  speakers: { [shortDID: string]: { count: number, likes: number } },
@@ -23,14 +23,19 @@ import { breakFeedURIPostOnly, firehose, shortenHandle, unwrapShortDID } from 'c
 
 /**
  * @typedef {{
+ *  uri: string,
+ *  placeholder?: false,
  *  conversation: ConversationDetails,
- *  replyToURI: string | undefined,
+ *  replyTo: MessageOrPlaceholder,
+ *  lastReference: number,
  *  likes: number,
  *  quoting?: string[],
  *  referring?: string[],
  *  words: WordStats
  * }} MessageDetails
  */
+
+/** @typedef {MessageDetails | { placeholder: true } & Omit<MessageDetails, 'placeholder'>} MessageOrPlaceholder */
 
 /**
  * @typedef {{
@@ -63,12 +68,12 @@ import { breakFeedURIPostOnly, firehose, shortenHandle, unwrapShortDID } from 'c
 
 export async function* streamEvents() {
   /** @type {Map<string, ConversationDetails>} */
-  const conversations = new Map();
+  const conversationByURI = new Map();
   /** @type {Map<string, ActorDetails>} */
   const actors = new Map();
 
-  /** @type {Map<string, Map<string, Partial<MessageDetails> & { uri: string, placeholder: true } | MessageDetails & { placeholder?: false }>>} */
-  const messagesByShortDIDByPostID = new Map();
+  /** @type {Map<string, MessageOrPlaceholder>} */
+  const messageByURI = new Map();
 
   for await (const msg of firehose.each()) {
     processMessage(msg);
@@ -117,41 +122,32 @@ export async function* streamEvents() {
 
   /**
    * @param {string | undefined} uri
-   * @param {{ shortDID: string, postID: string } | undefined} parsed
    * @param {number} receiveTimestamp
    */
-  function resolveMessageOrPlaceholderEmpty(uri, parsed, receiveTimestamp) {
-    if (!uri || !parsed) return;
+  function resolveMessageOrPlaceholder(uri, receiveTimestamp) {
+    if (!uri) return;
+    let msg = messageByURI.get(uri);
+    if (!msg) {
+      const shortDID = breakFeedURIPostOnly(uri)?.shortDID;
+      if (!shortDID) {
+        console.error('Malformed URI ', uri);
+        return;
+      }
 
-    return resolveMessageOrPlaceholder(uri, parsed.shortDID, parsed.postID, receiveTimestamp);
-  }
-
-  /**
-   * @param {string} uri
-   * @param {string} shortDID
-   * @param {string} postID
-   * @param {number} receiveTimestamp
-   */
-  function resolveMessageOrPlaceholder(uri, shortDID, postID, receiveTimestamp) {
-    let byPostID = messagesByShortDIDByPostID.get(shortDID);
-    if (!byPostID) {
       noteRepo(shortDID, receiveTimestamp);
-      byPostID = new Map();
-      messagesByShortDIDByPostID.set(shortDID, byPostID);
+      messageByURI.set(uri, msg = {
+        uri,
+        lastReference: receiveTimestamp,
+        placeholder: true
+      });
     }
 
-    let messageDetails = byPostID.get(postID);
-    if (!messageDetails) {
-      messageDetails = { uri, placeholder: true };
-      byPostID.set(postID, messageDetails);
-    }
-
-    return messageDetails;
+    return msg;
   }
 
   /** @param {import('coldsky').FirehoseRepositoryRecord<"app.bsky.feed.like">} msg */
   function processLike(msg) {
-    const messageDetails = resolveMessageOrPlaceholderEmpty(msg.uri, breakFeedURIPostOnly(msg.uri), msg.receiveTimestamp);
+    const messageDetails = resolveMessageOrPlaceholder(msg.uri, msg.receiveTimestamp);
     if (!messageDetails) return; // unresolvable
     messageDetails.likes = (messageDetails.likes || 0) + 1;
     if (messageDetails.conversation) {
@@ -170,70 +166,68 @@ export async function* streamEvents() {
 
     const shortDID = unwrapShortDID(msg.repo);
 
-    let byPostID = messagesByShortDIDByPostID.get(shortDID);
-    if (!byPostID) {
-      noteRepo(shortDID, msg.receiveTimestamp);
-      byPostID = new Map();
-      messagesByShortDIDByPostID.set(shortDID, byPostID);
-    }
+    // Cases:
+    // * new post in a known thread
+    // * new post in an unknown thread: root
+    // * new post in an unknown thread: reply
+    // * a post that already matches a placeholder
 
     const pathLastSlash = msg.path?.lastIndexOf('/');
     const postID = pathLastSlash > 0 ? msg.path.slice(pathLastSlash + 1) : msg.path;
 
-    const rootURI = msg.reply?.root?.uri || msg.uri;
-    const parsedRootURI = breakFeedURIPostOnly(rootURI);
-    const rootMessage = resolveMessageOrPlaceholderEmpty(rootURI, parsedRootURI, msg.receiveTimestamp);
-    let conversation = rootMessage?.placeholder ? undefined : rootMessage?.conversation;
-    if (!conversation) conversations.set(
-      msg.reply?.root?.uri || msg.uri,
-      conversation = {
-        uri: rootURI,
-        owner: parsedRootURI?.shortDID || shortDID,
-        messages: new Map(),
-        speakers: {},
-        earlier: {
-          likes: 0,
-          posts: 0,
-          words: {}
-        },
-        recent: {
-          likes: 0,
-          posts: 1,
-          words: {}
+    let postMessage = messageByURI.get(msg.uri);
+    if (postMessage) {
+      // TODO: probably a placeholder, need to resolve all things
+      postMessage.words = words;
+      postMessage.lastReference = msg.receiveTimestamp;
+    } else {
+      // first, is there a parent message?
+
+      const replyToMessage = !msg.reply?.root?.uri || msg.reply?.root?.uri === msg.uri ? undefined :
+        resolveMessageOrPlaceholder(msg.reply.root.uri, msg.receiveTimestamp);
+
+      let conversation = replyToMessage?.conversation;
+      if (!conversation) {
+        // create/lookup a conversation, create full materialised message
+        const rootURI = msg.reply?.root?.uri || msg.uri;
+        conversation = conversationByURI.get(rootURI);
+
+        if (!conversation) {
+          conversation = {
+            rootURI,
+            owner: msg.repo,
+            messages: new Map(),
+            speakers: {},
+            earlier: {
+              likes: 0,
+              posts: 0,
+              words: {}
+            },
+            recent: {
+              likes: 0,
+              posts: 0,
+              words: {}
+            }
+          };
+          conversationByURI.set(rootURI, conversation);
         }
       }
-    );
 
-    if (rootMessage && rootMessage.conversation) {
-        rootMessage.conversation = conversation;
-        conversation.messages.set(rootURI, rootMessage);
-      }
-
-      rootMessage.conversation.recent.posts++;
-      textWords(msg.text, rootMessage.conversation.recent.words);
-    } else {
-
-    }
-
-    if (rootMessage) {
-
-    }
-
-    if (msg.reply?.parent?.uri !== msg.uri) {
-      const parentURI = breakFeedURIPostOnly(msg.reply?.parent?.uri);
-      const parentMessage = parentURI && resolveMessageOrPlaceholder(parentURI, msg.receiveTimestamp);
-      if (parentMessage) {
-        if (!rootMessage?.conversation) rootMessage?.conversation = 
-      }
-    }
-
-    byPostID.set(
-      postID,
-      {
-        replyToURI: msg.reply,
+      postMessage = {
+        uri,
+        conversation,
+        lastReference: msg.receiveTimestamp,
         likes: 0,
-        words,
-      });
+        quoting: [],
+        referring: [],
+        replyTo: replyToMessage
+      };
+
+      // TODO: add message to the conversation
+      conversation.messages.set(postMessage.uri, postMessage);
+      
+
+    }
   }
 
   /** @param {import('coldsky').FirehoseRepositoryRecord<"app.bsky.feed.repost">} msg */
@@ -351,4 +345,20 @@ function textWords(text, words) {
 
 function calcRating(word) {
   return 0.5;
+}
+
+/**
+ * @param {WordStats} operand
+ * @param {WordStats} ratingsToAdd
+ */
+function wordStatsAddRatings(operand, ratingsToAdd) {
+  for (const k in ratingsToAdd) {
+    const newRatings = ratingsToAdd[k];
+    const existingRatings = operand[k];
+    if (existingRatings) {
+      newRatings.count += existingRatings.count;
+    } else {
+      operand[k] = { ...newRatings };
+    }
+  }
 }
