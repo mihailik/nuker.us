@@ -279,11 +279,11 @@ export function boot(elem, unmountPromise) {
     if (nodes.length) {
 
       if (!simulation) {
-        simulation = d3.forceSimulation(nodes).velocityDecay(0.2).alphaDecay(0.01)
-          .force("link", d3.forceLink(nodeLinks).id(n => n.uri).strength(5).distance(0.006))
-          .force("charge", d3.forceManyBody().strength(-0.003))
-          .force('center', d3.forceCenter().strength(0.0002))
-          .force("collide", d3.forceCollide(0.006))
+        simulation = d3.forceSimulation(nodes).velocityDecay(0.3).alphaDecay(0.001)
+          .force("link", d3.forceLink(nodeLinks).id(n => n.uri).strength(1.35).distance(0.08))
+          .force("charge", d3.forceManyBody().strength(-0.0004))
+          .force('center', d3.forceCenter().strength(0.000001))
+          .force("collide", d3.forceCollide(0.01))
           .force("x", d3.forceX())
           .force("y", d3.forceY());
         simulation.stop();

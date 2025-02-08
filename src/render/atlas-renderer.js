@@ -82,19 +82,19 @@ export function createAtlasRenderer({
             float startTime = min(extra.x, extra.y);
             float endTime = max(extra.x, extra.y);
             float timeRatio = (time - startTime) / (endTime - startTime);
-            float step = 0.01;
+            float step = 0.05;
             float timeFunction =
               timeRatio < step ? timeRatio / step :
               timeRatio < step * 2.0 ?
                 (cos((step * 2.0 - timeRatio) * step * PI) + 1.0) / 4.5 + 0.7 :
                 (1.0 - (timeRatio - step * 2.0)) / 2.5 + 0.2;
 
-            float pulsatingTimeFunction =
-              timeFunction * (sin((time - endTime)*6.0) + 4.0) / 5.0;
+            // float pulsatingTimeFunction =
+            //   timeFunction * (sin((time - endTime)*6.0) + 4.0) / 5.0;
 
             gl_FragColor = tintColor;
 
-            gl_FragColor.a *= pulsatingTimeFunction;
+            gl_FragColor.a *= timeFunction;
 
             // gl_FragColor =
             //   timeRatio > 1000.0 ? vec4(1.0, 0.7, 1.0, tintColor.a) :

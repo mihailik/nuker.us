@@ -115,8 +115,8 @@ export function staticShaderRenderer({ clock, nodes: nodeArray, massScale }) {
               float radiusRatio =
                 dist < 0.5 ? 1.0 - dist * 2.0 : 0.0;
 
-              float fogStart = 0.6;
-              float fogGray = 1.0;
+              float fogStart = 2.0;
+              float fogGray = 10.0;
               float fogRatio = vFogDist < fogStart ? 0.0 : vFogDist > fogGray ? 1.0 : (vFogDist - fogStart) / (fogGray - fogStart);
 
               vec4 tintColor = vColor;

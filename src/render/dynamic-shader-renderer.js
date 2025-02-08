@@ -101,8 +101,8 @@ export function dynamicShaderRenderer({
               float radiusRatio =
                 dist < 0.5 ? 1.0 - dist * 2.0 : 0.0;
 
-              float fogStart = 0.6;
-              float fogGray = 1.0;
+              float fogStart = 3.0;
+              float fogGray = 20.0;
               float fogRatio = vFogDist < fogStart ? 0.0 : vFogDist > fogGray ? 1.0 : (vFogDist - fogStart) / (fogGray - fogStart);
 
               vec4 tintColor = vColor;
@@ -164,22 +164,34 @@ export function dynamicShaderRenderer({
         clock.nowMSec >= n.flash.stop)
         continue;
 
-      ensureGeometryIncrease(
-        flashNodeCount + 1 /* min */,
-        nodes.length - i + flashNodeCount /* max */,
-        flashNodeCount /* occupied */
-      );
+      flashNodeCount++;
+    }
 
-      offsetBuf[flashNodeCount * 3 + 0] = n.x;
-      offsetBuf[flashNodeCount * 3 + 1] = (n.h || 0);
-      offsetBuf[flashNodeCount * 3 + 2] = n.y;
+    ensureGeometryIncrease(
+      flashNodeCount + 1 /* min */,
+      nodes.length + flashNodeCount /* max */,
+      flashNodeCount /* occupied */
+    );
 
-      diameterBuf[flashNodeCount] = n.mass;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
 
-      colorBuf[flashNodeCount] = n.color;
+      if (!n.flash ||
+        n.flash.start === n.flash.stop ||
+        clock.nowMSec < n.flash.start ||
+        clock.nowMSec >= n.flash.stop)
+        continue;
 
-      extraBuf[flashNodeCount * 2 + 0] = n.flash.start / 1000;
-      extraBuf[flashNodeCount * 2 + 1] = n.flash.stop / 1000;
+      offsetBuf[i * 3 + 0] = n.x;
+      offsetBuf[i * 3 + 1] = (n.h || 0);
+      offsetBuf[i * 3 + 2] = n.y;
+
+      diameterBuf[i] = n.mass;
+
+      colorBuf[i] = n.color;
+
+      extraBuf[i * 2 + 0] = n.flash.start / 1000;
+      extraBuf[i * 2 + 1] = n.flash.stop / 1000;
 
       flashNodeCount++;
     }
