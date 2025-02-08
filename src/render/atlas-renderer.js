@@ -108,6 +108,9 @@ export function createAtlasRenderer({
             float diagBiasUltra = diagBias * diagBias * diagBias * diagBias;
             gl_FragColor.a *= diagBiasUltra * diagBiasUltra * diagBiasUltra;
 
+            gl_FragColor.r = 1.0;
+            gl_FragColor.a = 1.0;
+
             `
   });
 

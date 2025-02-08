@@ -16,6 +16,7 @@ import {
  *  allocateCount: number,
  *  fragmentShader?: string,
  *  vertexShader?: string,
+ *  massScale?: number
  * }} _ 
  */
 export function dynamicShaderRenderer({
@@ -23,6 +24,7 @@ export function dynamicShaderRenderer({
   allocateCount,
   fragmentShader,
   vertexShader,
+  massScale
 }) {
   let {
     geometry,
@@ -32,6 +34,8 @@ export function dynamicShaderRenderer({
     colorBuf
   } = createGeometryAndBuffers(allocateCount);
   geometry.instanceCount = 0;
+
+  const massScaleFactor = massScale || 16;
 
   const material = new ShaderMaterial({
     uniforms: {
@@ -186,7 +190,7 @@ export function dynamicShaderRenderer({
       offsetBuf[i * 3 + 1] = (n.h || 0);
       offsetBuf[i * 3 + 2] = n.y;
 
-      diameterBuf[i] = n.mass;
+      diameterBuf[i] = n.mass * massScaleFactor;
 
       colorBuf[i] = n.color;
 
