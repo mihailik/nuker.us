@@ -113,16 +113,21 @@ export function createAtlasRenderer({
 
   iterate();
 
-  return {
+  const atlas = {
+    /** @type {TParticle[]} */
+    nodes: [],
     mesh: flashRenderer.mesh,
     redraw,
     getNodeAtScreenPosition,
     animateAndPin
   };
 
+  return atlas;
+
   async function iterate() {
     for await (const nodes of nodesLive) {
       latestNodes = nodes;
+      atlas.nodes = nodes;
 
       if (!staticRenderer) {
         staticRenderer = staticShaderRenderer({
@@ -133,7 +138,6 @@ export function createAtlasRenderer({
       }
 
       staticRenderer.updateNodes({ nodes });
-      const now = Date.now();
       flashRenderer.updateNodes({ nodes });
 
       if (latestCamera) {
@@ -160,7 +164,7 @@ export function createAtlasRenderer({
     latestCamera.updateMatrixWorld();
     latestCamera.updateProjectionMatrix();
     const buf = new Vector3();
-    for (const node of knownNodes.values()) {
+    for (const node of latestNodes) {
       buf.set(node.x, (node.h || 0), node.y);
       buf.project(latestCamera);
 

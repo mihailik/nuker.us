@@ -1,6 +1,6 @@
 // @ts-check
 
-import { AmbientLight, DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
+import { AmbientLight, Color, DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { setupOrbitControls } from './setup-orbit-controls';
 
@@ -14,6 +14,7 @@ export function setupScene(clock) {
   camera.position.z = 0.88 * 2;
 
   const scene = new Scene();
+  //scene.background = new Color(0xffffff);
 
   const dirLight1 = new DirectionalLight(0xffffff, 7);
   dirLight1.position.set(0.5, 1, -0.5);

@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "start": "esbuild src/index.js --bundle --outdir=. --sourcemap --serve --servedir=.",
+    "start": "esbuild src/index.js --bundle --outdir=. --sourcemap --serve=8022 --servedir=.",
     "build": "npm run build-rust && npm run build-js",
     "build-rust-1-core": "cargo build --release --manifest-path ./rust/Cargo.toml --target wasm32-unknown-unknown",
     "build-rust-2-opt": "wasm-opt ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm.wasm -Oz -o ./rust/target/wasm32-unknown-unknown/release/nukerus_wasm.wasm || echo 'OPTIMIZATION SKIPPED'",
@@ -10,11 +10,11 @@
     "build-js": "esbuild src/index.js --loader:.wasm=binary --bundle --outdir=. --sourcemap --define:import.meta.url=\\\".\\\""
   },
   "dependencies": {
+    "@atproto/api": "^0.13.35",
     "@tensorflow/tfjs": "^4.22.0",
-    "coldsky": "^0.3.10",
+    "bski": "*",
+    "d3": "^7.9.0",
     "eld": "^1.0.1",
-    "@ipld/car": "^5.4.0",
-    "cbor-x": "^1.6.0",
     "esbuild": "^0.24.2",
     "multiformats": "^13.3.1",
     "three": "^0.172.0",
@@ -22,5 +22,8 @@
   },
   "devDependencies": {
     "ws": "^8.18.0"
+  },
+  "overrides": {
+    "three": "$three"
   }
 }

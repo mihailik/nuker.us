@@ -31,6 +31,7 @@ export function dynamicShaderRenderer({
     extraBuf,
     colorBuf
   } = createGeometryAndBuffers(allocateCount);
+  geometry.instanceCount = 0;
 
   const material = new ShaderMaterial({
     uniforms: {
@@ -128,6 +129,18 @@ export function dynamicShaderRenderer({
   mesh.frustumCulled = false;
   mesh.onBeforeRender = () => {
     material.uniforms['time'].value = clock.nowSeconds;
+    // if (geometry.instanceCount) {
+    //   const time = clock.nowSeconds;
+    //   const times = [];
+    //   for (let i = 0; i < geometry.instanceCount; i++) {
+    //     times.push({
+    //       start: extraBuf[i * 2 + 0],
+    //       stop: extraBuf[i * 2 + 1],
+    //       on: time >= extraBuf[i * 2 + 0] && time < extraBuf[i * 2 + 1]
+    //     })
+    //   }
+    //   console.log('flash render ', time, times);
+    // }
   };
   return {
     mesh,
@@ -146,7 +159,7 @@ export function dynamicShaderRenderer({
       const n = nodes[i];
 
       if (!n.flash ||
-        n.flash.start === n.flash.start ||
+        n.flash.start === n.flash.stop ||
         clock.nowMSec < n.flash.start ||
         clock.nowMSec >= n.flash.stop)
         continue;
@@ -165,8 +178,8 @@ export function dynamicShaderRenderer({
 
       colorBuf[flashNodeCount] = n.color;
 
-      extraBuf[flashNodeCount * 2 + 0] = n.flash.start;
-      extraBuf[flashNodeCount * 2 + 1] = n.flash.stop;
+      extraBuf[flashNodeCount * 2 + 0] = n.flash.start / 1000;
+      extraBuf[flashNodeCount * 2 + 1] = n.flash.stop / 1000;
 
       flashNodeCount++;
     }
@@ -175,8 +188,6 @@ export function dynamicShaderRenderer({
     geometry.attributes['diameter'].needsUpdate = true;
     geometry.attributes['color'].needsUpdate = true;
     geometry.attributes['extra'].needsUpdate = true;
-
-    geometry.instanceCount = flashNodeCount;
   }
 
   /**
@@ -192,6 +203,7 @@ export function dynamicShaderRenderer({
       maxRequiredCount + 100);
 
     const recreated = createGeometryAndBuffers(allocateCount);
+    geometry.instanceCount = occupiedCount;
 
     copyFloat32Array(
       offsetBuf, 0,
@@ -220,6 +232,8 @@ export function dynamicShaderRenderer({
     geometry.dispose();
     geometry = recreated.geometry;
     mesh.geometry = geometry;
+
+    geometry.instanceCount = occupiedCount;
   }
 }
 
@@ -245,7 +259,6 @@ function createGeometryAndBuffers(allocateCount) {
   geometry.setAttribute('diameter', new InstancedBufferAttribute(diameterBuf, 1));
   geometry.setAttribute('extra', new InstancedBufferAttribute(extraBuf, 2));
   geometry.setAttribute('color', new InstancedBufferAttribute(colorBuf, 1));
-  geometry.instanceCount = allocateCount;
 
   return {
     geometry,

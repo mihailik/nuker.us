@@ -1,7 +1,6 @@
 // @ts-check
 
 import * as THREE from 'three';
-import { firehose } from 'coldsky/firehose';
 import { boot } from './setup/boot';
 
 animateSplashOff();

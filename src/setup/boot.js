@@ -1,13 +1,20 @@
 // @ts-check
 
+/// <reference types="d3" />
+
 import { BoxGeometry, EdgesGeometry, LineBasicMaterial, LineSegments, WireframeGeometry } from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
+
+import * as d3 from 'd3';
+
+import { firehose } from 'bski';
 
 import { makeClock } from '../core/clock';
 import { createAtlasRenderer } from '../render';
 import { handleWindowResizes } from './handle-window-resizes';
 import { setupScene } from './setup-scene';
 import { startAnimation } from './start-animation';
+import { throttledAsyncCache } from '../core/throttled';
 // import { layoutCalculator } from '../layout/calculator';
 
 /**
@@ -52,9 +59,99 @@ export function boot(elem, unmountPromise) {
 
   const box = new BoxGeometry(1, 1, 1);
   const geo = new EdgesGeometry(/** @type {*} */(box));
-  const mat = new LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+  const mat = new LineBasicMaterial({ color: 0x808080, transparent: true, opacity: 0.4, linewidth: 2 });
   const wireframe = new LineSegments(geo, mat);
   scene.add(wireframe);
+
+  /** @type {HTMLElement} */
+  var textElem;
+  var updatingNode;
+  var fetchByUri;
+
+  elem.addEventListener('mousemove', async (e) => {
+    const node = atlasRenderer.getNodeAtScreenPosition(e);
+    if (!node) return;
+
+    if (!fetchByUri) {
+      fetchByUri = throttledAsyncCache(uri => fetch(uri).then(x => x.json()));
+    }
+
+    updatingNode = node;
+
+    console.log('fetching hover post ', node);
+    /** @type {import('@atproto/api/dist/client/types/app/bsky/feed/defs').ThreadViewPost} */
+    let postThread = (await fetchByUri(
+      'https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=' +
+      node.uri
+    )).thread;
+    const rootURI = /** @type {AppBskyFeedPost} */(postThread.post.record).reply?.root.uri;
+    if (rootURI !== node.uri && rootURI) {
+      postThread = (await fetchByUri(
+        'https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=' +
+        rootURI
+      )).thread;
+    }
+
+    if (updatingNode !== node) return;
+
+    console.log('fetched hover post ', postThread, node);
+
+    if (!textElem) {
+      textElem = document.createElement('div');
+      textElem.style.cssText =
+        `position: absolute; left: 0; top: 0; width: 100%; font-size: 50%; z-index: 10; font: inherit; padding: 0.5em;
+          height: 10em; overflow: auto;
+          display: grid; grid-template-rows: 1fr;
+          grid-gap: 0.5em;
+        `;
+      elem.appendChild(textElem);
+    }
+
+    const posts = [
+      postThread.post,
+      .../** @type {typeof postThread[]} */(postThread.replies).map(r => r.post)
+    ].filter(p => atlasRenderer.nodes.find(n => n.uri === p.uri));
+
+    textElem.textContent = '';
+    textElem.style.gridTemplateColumns = 'repeat(' + posts.length + ', 1fr)';
+
+    var focusPost;
+    for (const p of posts) {
+      const rec = /** @type {AppBskyFeedPost} */(p.record);
+      if (!rec.text) continue;
+
+      const postElem = document.createElement('div');
+
+      const authorElem = document.createElement('a');
+      authorElem.href = p.uri.replace(/^at\:\/\//, 'https://bsky.app/profile/').replace(/app\.bsky\.feed\.post/, 'post');
+      authorElem.target = '_blank';
+      const colorElem = document.createElement('span');
+      colorElem.style.cssText = 'width: 0.7em; height: 0.7em; border-radius: 1em; display: inline-block; border: solid 1px silver;';
+      colorElem.style.backgroundColor = '#' + (0x1000000 + deriveColor(p.author.did)).toString(16).slice(1);
+      authorElem.appendChild(colorElem);
+      const authorHandleElem = document.createElement('span');
+      authorHandleElem.textContent = ' ' + p.author.handle;
+      authorElem.appendChild(authorHandleElem);
+      postElem.appendChild(authorElem);
+
+      const postText = document.createElement('div');
+      postText.style.whiteSpace = 'pre-wrap';
+      postText.textContent = rec.text;
+      postElem.appendChild(postText);
+
+      if (p.uri === node.uri) {
+        focusPost = postElem;
+        postElem.style.border = 'solid 1px gold';
+        postElem.style.borderRadius = '0.25em';
+      }
+
+      textElem.appendChild(postElem);
+    }
+
+    if (focusPost) {
+      textElem.scrollLeft = focusPost.offsetLeft;
+    }
+  });
 
 
   function onRedrawLive() {
@@ -62,10 +159,15 @@ export function boot(elem, unmountPromise) {
     lastRender = clock.nowMSec;
     orbit.controls?.update?.(Math.min(delta / 1000, 0.2));
 
+    runLayout(atlasRenderer.nodes);
+
     atlasRenderer.redraw(camera);
   }
 
   function onRedrawRare() {
+    if (atlasRenderer.nodes.length)
+      console.log('rare redraw ', atlasRenderer.nodes);
+
     //if (profilePositions.length < 10) return;
 
     // const layout = layoutCalculator({
@@ -76,147 +178,140 @@ export function boot(elem, unmountPromise) {
     // layout.run(100);
   }
 
+  /** @typedef {import('../render/static-shader-renderer').Particle & { uri: string, root: string, parent?: string }} ThreadParticle */
+
   async function* streamAccountPositions() {
-    /** @type {{[uri: string]: number}} */
-    const profileIndexByShortDID = {};
+    /**
+     * @type {ThreadParticle[]}
+     */
+    let allPosts = [];
+    /** @type {Map<string, ThreadParticle[]>} */
+    const threads = new Map();
 
-    let lastInject = Date.now();
-    const seenThreadUris = new Set();
+    /** @type {ThreadParticle[]} */
+    let liveThreadPosts = [];
 
-    return;
-    for await (const chunk of firehoseThreads(db)) {
-      /** @type {typeof chunk} */
-      const distinctThreads = [];
-      const distinctNewShortDIDs = [];
-      for (const th of chunk) {
-        let matchExisting = false;
-        for (let i = 0; i < distinctThreads.length; i++) {
-          if (distinctThreads[i].root.uri === th.root.uri) {
-            distinctThreads[i] = th;
-            matchExisting = true;
-            break;
-          }
-        }
-        if (!matchExisting) distinctThreads.push(th);
+    const MIN_THREAD_SIZE = 4;
+    const FILLED_WITH_THREAD_POSTS = 1000;
 
-        matchExisting = false;
-        for (let i = 0; i < distinctNewShortDIDs.length; i++) {
-          if (distinctNewShortDIDs[i] === th.root.shortDID) {
-            distinctNewShortDIDs[i] = th.root.shortDID;
-            matchExisting = true;
-            break;
-          }
-        }
+    const breakRegExp = /^at\:\/\/([^/]+)\//g;
 
-        if (!matchExisting) distinctNewShortDIDs.push(th.root.shortDID);
-      }
+    for await (const chunk of firehose()) {
+      let updated = false;
+      for (const msg of chunk) {
+        if (msg.action !== 'create') continue;
+        if (msg.$type !== 'app.bsky.feed.post') continue;
 
-      const retrieveProfiles = [];
-      for (const th of distinctThreads) {
-        const thWithPos = /** @type {ThreadWithPosition} */(th);
-        calcPos(thWithPos);
+        let repo = msg.uri.slice(5);
+        repo = repo.slice(0, repo.indexOf('/'));
+        if (!repo) continue;
 
-        const existingProfileIndex = profileIndexByShortDID[th.root.shortDID];
-        if (typeof existingProfileIndex === 'number') {
-          if (!seenThreadUris.has(th.root.uri)) {
-            profilePositions[existingProfileIndex].mass += Math.sqrt(th.all.length) / 20000;
-            seenThreadUris.add(th.root.uri);
-          }
+        const color = deriveColor(repo);
+        const posColor = deriveColor(msg.text);
+        const posSrc = Math.floor(overHashColor(posColor) * 0x10000);
+        const x = (posSrc & 0xFF) / 255 - 0.5;
+        const y = ((posSrc >> 8) & 0xFF) / 255 - 0.5;
+
+        /** @type {ThreadParticle} */
+        const p = {
+          uri: msg.uri,
+          root: msg.reply?.root?.uri || msg.uri,
+          parent: msg.reply?.parent?.uri,
+          color,
+          mass: 0.02,
+          x,
+          y,
+          flash: { start: clock.nowMSec, stop: clock.nowMSec + 20000 },
+          description: msg.text,
+          key: msg.uri,
+          label: msg.text.trim().split(/\s+/g)[0]
+        };
+
+        allPosts.push(p);
+
+        let thr = threads.get(p.root);
+        if (!thr) {
+          thr = [p];
+          threads.set(p.root, thr);
         } else {
-          retrieveProfiles.push((async () => {
-            try {
-              for await (const profile of db.getProfileIncrementally(th.root.shortDID)) {
-                const index = profilePositions.length;
-                const newProfilePos = {
-                  ...profile,
-                  index,
-                  mass: Math.log10((profile.followersCount || 1) + th.all.length) / 200 + 0.002,
-                  x: thWithPos.x,
-                  y: thWithPos.y,
-                  color: deriveColor(profile.shortDID)
-                }
-                profilePositions.push(newProfilePos);
-                profileIndexByShortDID[profile.shortDID] = index;
-
-                if (typeof profileIndexByShortDID[profile.shortDID] !== 'number') {
-                  /** @type {Set<string>} */
-                  const linked = new Set();
-                  for (const post of th.all) {
-                    if (post.shortDID !== profile.shortDID && !linked.has(post.shortDID)) {
-                      const linkedProfileIndex = profileIndexByShortDID[post.shortDID];
-                      if (typeof linkedProfileIndex === 'number') {
-                        const linkedProfile = profilePositions[linkedProfileIndex];
-                        profileLinks.push([linkedProfile, newProfilePos]);
-                        profileLinks.push([newProfilePos, linkedProfile]);
-                        linked.add(linkedProfile.shortDID);
-                      }
-                    }
-                  }
-                }
-              }
-            } catch (profileError) {
+          thr.push(p);
+          if (thr.length === MIN_THREAD_SIZE) {
+            for (const p of thr) {
+              liveThreadPosts.push(p);
             }
-          })());
+            updated = true;
+          } else if (thr.length > MIN_THREAD_SIZE) {
+            liveThreadPosts.push(p);
+            updated = true;
+          }
         }
       }
 
-      await Promise.all(retrieveProfiles);
+      if (updated && liveThreadPosts.length) {
+        let liveThreadList = [...threads.values()].filter(th => th.length > MIN_THREAD_SIZE);
 
-      lastInject = Date.now();
+        console.log('live threads ', liveThreadList);
 
-      console.log('threads: ', profilePositions);
-      yield profilePositions;
+        const y = liveThreadPosts;
+        liveThreadPosts = liveThreadPosts.slice();
+        yield y;
+
+        if (liveThreadPosts.length > FILLED_WITH_THREAD_POSTS) break;
+      }
     }
   }
 
   // TODO: handle unmountPromise
 
-  /**
-   * @typedef {import('../../package').CompactThreadPostSet & {
-   *  x: number,
-   *  y: number
-   * }} ThreadWithPosition
-   */
 
-  /**
-   * @param {ThreadWithPosition} thread
-   */
-  function calcPos(thread) {
-    const oldX = thread.x || 0;
-    const oldY = thread.y || 0;
+  var simulation;
+  var nodeCount;
 
-    thread.x = 0;
-    thread.y = 0;
+  /** @param {typeof atlasRenderer.nodes} nodes */
+  function runLayout(nodes) {
+    const nodesMap = new Map(nodes.map(n => [n.uri, n]));
+    const nodeLinks = [];
+    for (const n of nodes) {
+      const p = n.parent ? nodesMap.get(n.parent) : undefined;
+      if (p) nodeLinks.push({ source: p, target: n });
+    }
 
-    if (thread.root.text?.length) {
-      for (let i = 0; i < thread.root.text.length; i++) {
-        const charCode = thread.root.text.charCodeAt(i);
-        thread.x += 1 / charCode;
-        thread.x = Math.pow(10, thread.x);
-        thread.x = thread.x - Math.floor(thread.x);
+    if (nodes.length) {
+
+      if (!simulation) {
+        simulation = d3.forceSimulation(nodes).velocityDecay(0.2).alphaDecay(0.01)
+          .force("link", d3.forceLink(nodeLinks).id(n => n.uri).strength(5).distance(0.006))
+          .force("charge", d3.forceManyBody().strength(-0.003))
+          .force('center', d3.forceCenter().strength(0.0002))
+          .force("collide", d3.forceCollide(0.006))
+          .force("x", d3.forceX())
+          .force("y", d3.forceY());
+        simulation.stop();
+      } else {
+        simulation.nodes(nodes);
+        simulation.force("link").links(nodeLinks);
       }
-      thread.x = thread.x - 0.5;
-    }
 
-    for (let i = 0; i < thread.root.uri.length; i++) {
-      const charCode = thread.root.uri.charCodeAt(i);
-      thread.y += 1 / charCode;
-      thread.y = Math.pow(10, thread.y);
-      thread.y = thread.y - Math.floor(thread.y);
-    }
+      if (nodeCount !== nodes.length) {
+        const alpha = simulation.alpha();
+        simulation.alpha(1);
+        nodeCount = nodes.length;
+        simulation.restart();
+        simulation.stop();
+        const freshAlpha = simulation.alpha();
+        console.log('restart the forces ', nodes, { alpha, freshAlpha });
+      }
 
-    thread.y = thread.y - 0.5;
-
-    if (oldX && oldY) {
-      const dist = Math.sqrt(thread.x * thread.x + thread.y * thread.y);
-      const angle = Math.atan2(thread.y, thread.x);
-
-      const rotateAngle = (2 * Math.random() - 1) * Math.PI * 2 / 360 * 15;
-
-      thread.x = oldX + Math.cos(angle + rotateAngle) * dist;
-      thread.y = oldY + Math.sin(angle + rotateAngle) * dist;
+      simulation.tick(1);
     }
   }
+
+}
+
+function overHashColor(color) {
+  let r = Math.pow(10, color / 0xFFFFFF);
+  r = r - Math.floor(r);
+  return r;
 }
 
 function deriveColor(shortDID) {
